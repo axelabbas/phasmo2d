@@ -1,15 +1,16 @@
 import json
 import pygame
-from math import sqrt
-from player import Player
-from shadows import Shadow
+from models.player import Player
+from models.block import Block
+from shadows import FOVSystem
 
 # Initialize pygame
 pygame.init()
 
 # Constants
-HEIGHT, WIDTH = 1000,1000
+HEIGHT, WIDTH = 640, 360
 TILE_SIZE = 16
+FPS = 60
 
 # Pygame setup
 window = pygame.display.set_mode((HEIGHT, WIDTH))
@@ -21,23 +22,30 @@ player = Player(WIDTH // 2 - 16 // 2, HEIGHT // 2 - 16 // 2)
 # Movement tracking
 moving = {"left": False, "right": False, "up": False, "down": False}
 
-# Shadow system
-shadow = Shadow()
-blocks = []
-
 # Load level from JSON
+blocks = []
 with open("levels/map.json", 'r') as file:
-    level = json.load(file)  # No need for `loads` since we read from file
-    max_x, max_y = shadow.loadMap(level)
+    level = json.load(file)
     for item in level:
         x, y = map(int, item.split(";"))
-        blocks.append(pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-    
-# Generate edges
-shadow.convert_tilemap_to_polymap(0,0, max_x, max_y, 16)
-# Main game loop
+        cell = Block(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE)
+        blocks.append(cell.rect)  # We just need the rects for FOV
+
+# Initialize FOV system
+fov_system = FOVSystem(
+    blocks=blocks,
+    fov_angle=50,
+    base_ray_count=20,
+    view_distance=200,
+    ray_density=.4,
+    grid_size=16
+)
+
 running = True
 dt = 0.1
+darkness_surface = pygame.Surface((HEIGHT, WIDTH), pygame.SRCALPHA)
+light_surface = pygame.Surface((HEIGHT, WIDTH), pygame.SRCALPHA)
+
 while running:
     # Handle events
     for event in pygame.event.get():
@@ -64,34 +72,39 @@ while running:
             elif event.key in [pygame.K_DOWN, pygame.K_s]:
                 moving["down"] = False
 
-    # Player movement calculations
-    # update with moves
-    player.update(window, moving=moving, dt=dt)
+    # Clear screen
+    window.fill((0, 0, 0))
+   
+    mouse_pos = pygame.mouse.get_pos()
+    player_pos = (player.x + player.player_size//2, player.y + player.player_size//2)
 
-    # Render
-    window.fill((0, 0, 0))  # Clear screen
+    # Draw blocks only in visible area
+    view_rect = pygame.Rect(player.x - 300, player.y - 200, 600, 400)
+    for block in blocks:
+        if view_rect.colliderect(block):
+            pygame.draw.rect(window, (255, 255, 255), block)
+    
+    # Calculate FOV with optimized ray count
+    visible_blocks = fov_system._get_blocks_in_area(player.x, player.y, fov_system.view_distance)
+    rays = fov_system.calculate_fov(player_pos, mouse_pos=mouse_pos)
+    
+    pygame.draw.rect(window, (255,0,0), pygame.Rect(3*TILE_SIZE, 3* TILE_SIZE, TILE_SIZE, TILE_SIZE))
+    # Optimized lighting
+    lighting = fov_system.create_combined_lighting((HEIGHT, WIDTH), rays, player_pos)
+    window.blit(lighting, (0, 0))
 
     # Draw blocks (walls)
-    for block in blocks:
-        pygame.draw.rect(window, (255, 0, 255), block)
 
-    # Draw shadows (edges)
-    # for edge in edges:
-    #     pygame.draw.line(window, (255, 255, 255), (edge.sx, edge.sy), (edge.ex, edge.ey), 1)
-    #     pygame.draw.circle(window, (255, 0, 0), (edge.sx, edge.sy), 1)
-    #     pygame.draw.circle(window, (255, 0, 0), (edge.ex, edge.ey), 1)
-  
-    for edge in shadow.edges:
-        pygame.draw.line(window, (255, 255, 255), (edge.sx, edge.sy), (edge.ex, edge.ey), 1)
-        pygame.draw.circle(window, (255, 0, 0), (edge.sx, edge.sy), 1)
-        pygame.draw.circle(window, (255, 0, 0), (edge.ex, edge.ey), 1)
-  
-
-
+    player.update(window, moving=moving, dt=dt, blocks=blocks)
+    # For debugging: draw rays (set to True to visualize)
+    if False:
+        for start, end in rays:
+            pygame.draw.line(window, (255, 255, 0, 50), start, end, 1)
+    
     # Update display
     pygame.display.flip()
-
+    
     # Frame rate control
-    dt = max(0.001, min(0.1, clock.tick(60) / 1000))
+    dt = max(0.001, min(0.1, clock.tick(FPS) / 1000))
 
 pygame.quit()
