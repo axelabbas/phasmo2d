@@ -1,6 +1,7 @@
 import json
 import math
 import pygame
+from models.enemy import Enemy
 from models.player import Player
 from models.block import Block
 from shadows import FOVSystem
@@ -46,7 +47,7 @@ running = True
 dt = 0.1
 darkness_surface = pygame.Surface((HEIGHT, WIDTH), pygame.SRCALPHA)
 light_surface = pygame.Surface((HEIGHT, WIDTH), pygame.SRCALPHA)
-enemyRect = pygame.Rect(3*TILE_SIZE, 3* TILE_SIZE, TILE_SIZE, TILE_SIZE) 
+enemy = Enemy(30,30, TILE_SIZE) 
 while running:
     # Handle events
     for event in pygame.event.get():
@@ -92,19 +93,18 @@ while running:
     visible_blocks = fov_system._get_blocks_in_area(player.x, player.y, fov_system.view_distance)
     rays, hit_blocks = fov_system.calculate_fov(player_pos, mouse_pos=mouse_pos)
     
-    pygame.draw.rect(window, (255,0,0), enemyRect)
+    pygame.draw.rect(window, (255,0,0), enemy.rect)
     # Optimized lighting
-    lighting = fov_system.create_combined_lighting((HEIGHT, WIDTH), rays, player_pos)
+    lighting = fov_system.create_combined_lighting((HEIGHT, WIDTH), rays, player_pos, 500, 100)
     window.blit(lighting, (0, 0))
     mouse_x, mouse_y = pygame.mouse.get_pos()
     player_center = (player.x + player.player_size//2, player.y + player.player_size//2)
     facing_angle = math.atan2(mouse_y - player_center[1], mouse_x - player_center[0])
     # Draw blocks (walls)
-    if fov_system.is_visible(player_pos, enemyRect, facing_angle):
-        print("Ghost is visible!")
-    print("-")
-
+    if not fov_system.is_visible(player_pos, enemy.rect, facing_angle):
+        enemy.update(player_pos)
     player.update(window, moving=moving, dt=dt, blocks=blocks)
+
     # For debugging: draw rays (set to True to visualize)
     if False:
         for start, end in rays:

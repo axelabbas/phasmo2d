@@ -197,7 +197,7 @@ class FOVSystem:
             # When light, produce dramatic flickering (40-120)
             base = random.randrange(110, 120)
             return base
-    def create_combined_lighting(self, size: Tuple[int, int], rays: List, player_pos: Tuple[float, float]):
+    def create_combined_lighting(self, size: Tuple[int, int], rays: List, player_pos: Tuple[float, float], lightframes: int=500, darkframes: int=100):
         """Optimized combined lighting with pre-allocation"""
         if not hasattr(self, '_combined_lighting') or size != self._combined_lighting.get_size():
             self._combined_lighting = pygame.Surface(size, pygame.SRCALPHA)
@@ -217,7 +217,7 @@ class FOVSystem:
             
             # Draw directly to surfaces
             
-            alpha = self.create_light_flicker(lightframes=500, darkframes=100)
+            alpha = self.create_light_flicker(lightframes=lightframes, darkframes=darkframes)
             # actual visiblity (alpha = 0 visible)
             pygame.draw.polygon(self._combined_lighting, (0, 0, 0,  255-alpha), [player_pos] + points)
             # light cone only effect (alpha=255 visible)
@@ -229,7 +229,7 @@ class FOVSystem:
     def is_visible(self, viewer_pos, target_rect: pygame.Rect, facing_angle):
         """More accurate visibility check for rectangular objects"""
         # 1. Early exit if light is off
-        if not self.light_on:
+        if not self.light_on or self.dark:
             return False
         
         # 2. Check if target contains viewer (extremely close)
