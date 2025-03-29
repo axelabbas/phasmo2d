@@ -1,5 +1,6 @@
 import math
 import random
+import time
 import pygame
 from math import atan2, cos, sin, floor
 from typing import List, Tuple
@@ -34,9 +35,10 @@ class FOVSystem:
         self._init_spatial_partition()
         
         # Create darkness surface
-        self.darkness = None
-        self.last_size = (0, 0)
-    
+        self.lightness_frames = 0
+        self.darkness_frames = 0
+        self.dark = False
+        self.light_on = True
     def _init_spatial_partition(self):
         """Optimized spatial partitioning initialization"""
         self.grid = {}
@@ -145,6 +147,8 @@ class FOVSystem:
         rays = []
         for i in range(ray_count):
             # Calculate angle for this ray
+            # This spreads the rays evenly across the FOV angle
+                   #facing         start of cone            fraction added to move    
             angle = center_angle - half_fov + (2 * half_fov * i / max(1, ray_count-1))
             
             # Cast ray using DDA algorithm
@@ -153,71 +157,43 @@ class FOVSystem:
         
         return rays
     
-    def create_fov_surface(self, size: Tuple[int, int], 
-                         rays: List[Tuple[Tuple[float, float], Tuple[float, float]]],
-                         player_pos: Tuple[float, float]) -> pygame.Surface:
-        """
-        Create a surface with darkness everywhere except visible areas.
-        
-        Args:
-            size: (width, height) of the surface to create
-            rays: List of rays from calculate_fov
-            player_pos: (x, y) position of player
-            
-        Returns:
-            pygame.Surface with alpha channel for darkness
-        """
-        # Recreate darkness surface if size changed
-        if size != self.last_size or self.darkness is None:
-            self.darkness = pygame.Surface(size, pygame.SRCALPHA)
-            self.last_size = size
-        
-        # Reset darkness surface
-        self.darkness.fill((0, 0, 0, 255))
-        
-        # Create visibility polygon if we have enough rays
-        if len(rays) >= 2:
-            points = [player_pos] + [end for _, end in rays]
-            pygame.draw.polygon(self.darkness, (0, 0, 0, 0), points)
-        
-        return self.darkness
-    
     def update_blocks(self, new_blocks: List[pygame.Rect]):
         """Update the blocking geometry (call when level changes)"""
         self.blocks = new_blocks
         self._init_spatial_partition()
-    def create_light_cone_surface(self, size: Tuple[int, int],
-                            rays: List[Tuple[Tuple[float, float], Tuple[float, float]]],
-                            player_pos: Tuple[float, float],
-                            color: Tuple[int, int, int] = (255, 255, 255),
-                            alpha: int = 50) -> pygame.Surface:
-        """
-        Create a surface with a light cone overlay.
+    
+    def toggle_light(self):
+        self.light_on = not self.light_on
+
+    def create_light_flicker(self, lightframes: int, darkframes: int):
+        if not self.light_on:
+            return 0
+        # State management
+        if self.dark:
+            self.lightness_frames = 0
+            self.darkness_frames += 1
+        elif not self.dark:
+            self.lightness_frames += 1
+            self.darkness_frames = 0
         
-        Args:
-            size: (width, height) of the surface to create
-            rays: List of rays from calculate_fov
-            player_pos: (x, y) position of player
-            color: RGB color of the light cone
-            alpha: Transparency (0-255)
-            
-        Returns:
-            pygame.Surface with alpha channel for light cone
-        """
-        light_cone = pygame.Surface(size, pygame.SRCALPHA)
+        # State transitions with randomness
+        if (self.lightness_frames >= random.randrange(lightframes, int(lightframes*1.2))):
+            self.dark = True
+        if (self.darkness_frames >= random.randrange(darkframes, int(darkframes*1.2))):
+            self.dark = False
         
-        # Create visibility polygon if we have enough rays
-        if len(rays) >= 2:
-            points = [player_pos] + [end for _, end in rays]
-            
-            # Draw the filled polygon
-            pygame.draw.polygon(light_cone, (*color, alpha), points)
-            
-            # Optional: Add a brighter border
-            border_color = (*color, min(alpha + 100, 255))
-            pygame.draw.polygon(light_cone, border_color, points, 2)
-        
-        return light_cone
+        # Enhanced flickering behavior
+        if self.dark:
+            # When dark, occasionally produce small flickers (40-70)
+            if random.random() < 0.05:  # 5% chance of small flicker during dark phase
+
+                return random.randrange(40, 70)
+            return 0
+        elif not self.dark:
+
+            # When light, produce dramatic flickering (40-120)
+            base = random.randrange(110, 120)
+            return base
 
     def create_combined_lighting(self, size: Tuple[int, int], rays: List, player_pos: Tuple[float, float]):
         """Optimized combined lighting with pre-allocation"""
@@ -237,8 +213,12 @@ class FOVSystem:
             points.append(rays[-1][1])  # Last ray end
             
             # Draw directly to surfaces
-            pygame.draw.polygon(self._combined_lighting, (0, 0, 0, 0), [player_pos] + points)
-            pygame.draw.polygon(self._light_cone, (255, 255, 255, random.choice(range(110,120))), [player_pos] + points)
+            
+            alpha = self.create_light_flicker(lightframes=500, darkframes=100)
+            # actual visiblity (alpha = 0 visible)
+            pygame.draw.polygon(self._combined_lighting, (0, 0, 0,  255-alpha), [player_pos] + points)
+            # light cone only effect (alpha=255 visible)
+            pygame.draw.polygon(self._light_cone, (255, 255, 255, alpha), [player_pos] + points) 
         
         # Combine
         self._combined_lighting.blit(self._light_cone, (0, 0))

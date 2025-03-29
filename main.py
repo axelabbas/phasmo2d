@@ -62,6 +62,9 @@ while running:
                 moving["up"] = True
             elif event.key in [pygame.K_DOWN, pygame.K_s]:
                 moving["down"] = True
+            elif event.key == pygame.K_z:
+                fov_system.toggle_light()
+            
         elif event.type == pygame.KEYUP:
             if event.key in [pygame.K_LEFT, pygame.K_a]:
                 moving["left"] = False
