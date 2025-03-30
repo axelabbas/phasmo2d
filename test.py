@@ -2,7 +2,7 @@ import json
 import pygame
 from models.player import Player
 from models.block import Block
-from shadows import FOVSystem  # Our new class
+from light import LightSystem  # Our new class
 
 # Initialize pygame
 pygame.init()
@@ -32,7 +32,7 @@ with open("levels/map.json", 'r') as file:
         blocks.append(cell.rect)  # We just need the rects for FOV
 
 # Initialize FOV system
-fov_system = FOVSystem(
+fov_system = LightSystem(
     blocks=blocks,
     fov_angle=90,
     base_ray_count=90,
@@ -82,7 +82,7 @@ while running:
 
     # In your main game loop (replace the darkness rendering):
     # Calculate FOV
-    rays = fov_system.calculate_fov(player_pos, mouse_pos=mouse_pos)
+    rays = fov_system.calculate_rays(player_pos, mouse_pos=mouse_pos)
 
     # Draw blocks (walls) - do this before lighting effects
     for block in blocks:
